@@ -23,6 +23,7 @@ import android.util.Base64;
 import android.view.View;
 import android.widget.Button;
 import android.widget.ImageView;
+import android.widget.ProgressBar;
 import android.widget.Toast;
 
 import com.theartofdev.edmodo.cropper.CropImage;
@@ -69,6 +70,7 @@ public class MainActivity extends AppCompatActivity {
     private Uri contentUri, styleUri;
     private ImageView contentImageView, styleImageView;
     private Button proceedButton;
+    private ProgressBar progressBar;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -78,6 +80,7 @@ public class MainActivity extends AppCompatActivity {
         contentImageView = findViewById(R.id.main_image_content);
         styleImageView = findViewById(R.id.main_image_style);
         proceedButton = findViewById(R.id.main_proceed_button);
+        progressBar = findViewById(R.id.main_progress_bar);
 
         CURR_SELECTOR = PICK_IMAGE_CONTENT;
         new Thread(new ClientThread()).start();
@@ -166,6 +169,7 @@ public class MainActivity extends AppCompatActivity {
 
     private void sendImage(Bitmap bitmap, String imgType) {
         if (bitmap != null) {
+            progressBar.setVisibility(View.VISIBLE);
             ByteArrayOutputStream bos = new ByteArrayOutputStream();
             int quality = (bitmap.getByteCount() > 200000) ? 40 : 100;
             bitmap.compress(Bitmap.CompressFormat.JPEG, quality, bos);
@@ -304,6 +308,7 @@ public class MainActivity extends AppCompatActivity {
                     if (CURR_SELECTOR == PICK_IMAGE_CONTENT) {
                         contentImageView.setImageBitmap(bitmap);
                         contentBitmap = bitmap;
+                        sendImage(contentBitmap, CONTENT_FORMAT);
                     }
                     if (CURR_SELECTOR == PICK_IMAGE_STYLE) {
                         styleImageView.setImageBitmap(bitmap);
@@ -339,10 +344,12 @@ public class MainActivity extends AppCompatActivity {
         @Override
         public void run() {
             System.out.println("Starting Message Receiver...");
+            int charRead = 0;
+            char[] buffer = new char[64];
             while(true) {
                 try {
-                    System.out.println("Message Received");
-                    String message = input.readLine();
+                    charRead = input.read(buffer);
+                    String message = new String(buffer).substring(0, charRead);
                     System.out.println("Message Received....");
                     System.out.println(message);
                 } catch (Exception e) {
@@ -350,6 +357,7 @@ public class MainActivity extends AppCompatActivity {
                     break;
                 }
             }
+            System.out.println("Out of input message loop....");
         }
     }
 
@@ -379,6 +387,12 @@ public class MainActivity extends AppCompatActivity {
                 dos.flush();
                 dos.write(message.getBytes());
                 dos.flush();
+                runOnUiThread(new Runnable() {
+                    @Override
+                    public void run() {
+                        progressBar.setVisibility(View.GONE);
+                    }
+                });
             } catch (Exception e) {
                 e.printStackTrace();
             }
