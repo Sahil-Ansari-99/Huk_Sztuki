@@ -60,6 +60,8 @@ public class MainActivity extends AppCompatActivity {
     private final String STYLE_FORMAT = "$STYLE";
     private final String CONTENT_FORMAT = "$CONTENT";
     private final String RESULT_FORMAT = "$RES";
+    private final String START = "$START";
+    private final String RECEIVED = "RECEIVED";
     private final String DISCONNECT = "!DISCONNECT";
     private int CURR_SELECTOR;
     private Bitmap contentBitmap, styleBitmap;
@@ -131,8 +133,11 @@ public class MainActivity extends AppCompatActivity {
         proceedButton.setOnClickListener(new View.OnClickListener() {
             @Override
             public void onClick(View view) {
-                sendImage(contentBitmap, CONTENT_FORMAT);
-//                new Thread(new MessageSender("Hello!")).start();
+//                sendImage(contentBitmap, CONTENT_FORMAT);
+                progressBar.setVisibility(View.VISIBLE);
+                if (styleBitmap != null && contentBitmap != null) new Thread(new MessageSender(START)).start();
+                else if (styleBitmap == null) Toast.makeText(getApplicationContext(), "Please select Style Image", Toast.LENGTH_LONG).show();
+                else Toast.makeText(getApplicationContext(), "Please select Content Image", Toast.LENGTH_LONG).show();
             }
         });
     }
@@ -313,6 +318,7 @@ public class MainActivity extends AppCompatActivity {
                     if (CURR_SELECTOR == PICK_IMAGE_STYLE) {
                         styleImageView.setImageBitmap(bitmap);
                         styleBitmap = bitmap;
+                        sendImage(styleBitmap, STYLE_FORMAT);
                     }
                 } catch (Exception e) {
                     e.printStackTrace();
@@ -349,9 +355,28 @@ public class MainActivity extends AppCompatActivity {
             while(true) {
                 try {
                     charRead = input.read(buffer);
+                    System.out.println("Char Read: " + charRead);
                     String message = new String(buffer).substring(0, charRead);
+                    int msgLen = Integer.valueOf(message.trim());
+                    int currLen = 0;
+                    StringBuilder recvMessage = new StringBuilder();
+                    char[] partBuffer = new char[1000];
+                    while(currLen < msgLen) {
+                        charRead = input.read(buffer);
+                        String curr = new String(buffer).substring(0, charRead);
+                        recvMessage.append(curr);
+                        currLen += curr.trim().length();
+                    }
+                    String completeMessage = recvMessage.toString();
+                    runOnUiThread(new Runnable() {
+                        @Override
+                        public void run() {
+                            progressBar.setVisibility(View.GONE);
+                        }
+                    });
                     System.out.println("Message Received....");
-                    System.out.println(message);
+                    System.out.println(completeMessage.length());
+                    System.out.println(completeMessage);
                 } catch (Exception e) {
                     e.printStackTrace();
                     break;
@@ -387,12 +412,12 @@ public class MainActivity extends AppCompatActivity {
                 dos.flush();
                 dos.write(message.getBytes());
                 dos.flush();
-                runOnUiThread(new Runnable() {
-                    @Override
-                    public void run() {
-                        progressBar.setVisibility(View.GONE);
-                    }
-                });
+//                runOnUiThread(new Runnable() {
+//                    @Override
+//                    public void run() {
+//                        progressBar.setVisibility(View.GONE);
+//                    }
+//                });
             } catch (Exception e) {
                 e.printStackTrace();
             }
