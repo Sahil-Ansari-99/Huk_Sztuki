@@ -18,6 +18,7 @@ import android.graphics.Bitmap;
 import android.graphics.BitmapFactory;
 import android.net.Uri;
 import android.os.Bundle;
+import android.os.Environment;
 import android.provider.MediaStore;
 import android.util.Base64;
 import android.view.View;
@@ -35,6 +36,7 @@ import java.io.DataInputStream;
 import java.io.DataOutputStream;
 import java.io.File;
 import java.io.FileInputStream;
+import java.io.FileOutputStream;
 import java.io.IOException;
 import java.io.InputStreamReader;
 import java.io.OutputStream;
@@ -49,7 +51,7 @@ import java.nio.MappedByteBuffer;
 import java.nio.channels.FileChannel;
 
 public class MainActivity extends AppCompatActivity {
-    private final String IP_ADDRESS = "192.168.1.6";
+    private final String IP_ADDRESS = "192.168.43.146";
     private final int PORT_NUMBER = 8080;
     private final int PICK_IMAGE_CONTENT = 1444;
     private final int PICK_IMAGE_STYLE = 1222;
@@ -73,19 +75,22 @@ public class MainActivity extends AppCompatActivity {
     private ImageView contentImageView, styleImageView;
     private Button proceedButton;
     private ProgressBar progressBar;
+    private ServerConnect serverConnect;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_main);
 
+        serverConnect = (ServerConnect)getApplication();
         contentImageView = findViewById(R.id.main_image_content);
         styleImageView = findViewById(R.id.main_image_style);
         proceedButton = findViewById(R.id.main_proceed_button);
         progressBar = findViewById(R.id.main_progress_bar);
 
         CURR_SELECTOR = PICK_IMAGE_CONTENT;
-        new Thread(new ClientThread()).start();
+//        new Thread(new ClientThread()).start();
+        new Thread(new ConnectionInitializer()).start();
 //        Thread thread = new Thread(new Runnable() {
 //            @Override
 //            public void run() {
@@ -177,7 +182,7 @@ public class MainActivity extends AppCompatActivity {
             progressBar.setVisibility(View.VISIBLE);
             ByteArrayOutputStream bos = new ByteArrayOutputStream();
             int quality = (bitmap.getByteCount() > 200000) ? 40 : 100;
-            bitmap.compress(Bitmap.CompressFormat.JPEG, quality, bos);
+            bitmap.compress(Bitmap.CompressFormat.JPEG, 40, bos);
             byte[] b = bos.toByteArray();
             String encodedImage = Base64.encodeToString(b, Base64.NO_WRAP);
             encodedImage = imgType + encodedImage;
@@ -260,16 +265,35 @@ public class MainActivity extends AppCompatActivity {
 //        }
     }
 
-    private void decodeImage(String encodedImage, String imgType) {
+    private void processMessage(String message) {
+        if (message.startsWith(RESULT_FORMAT)) {
+            decodeImage(message.substring(RESULT_FORMAT.length() + 1));
+        }
+    }
+
+    private void decodeImage(String encodedImage) {
+        byte[] decodedString = Base64.decode(encodedImage, Base64.DEFAULT);
+        final Bitmap decodedImg = BitmapFactory.decodeByteArray(decodedString, 0, decodedString.length);
+        System.out.println("Image Decoded...");
+//        saveImage(decodedImg);
+        runOnUiThread(new Runnable() {
+            @Override
+            public void run() {
+                contentImageView.setImageBitmap(decodedImg);
+            }
+        });
+    }
+
+    private void saveImage(Bitmap bitmap) {
         try {
-            encodedImage = URLEncoder.encode(encodedImage, "UTF-8");
-            System.out.println(encodedImage.charAt(0));
-            encodedImage = URLDecoder.decode(encodedImage, "UTF-8");
-            encodedImage = encodedImage.substring(imgType.length());
-            System.out.println(encodedImage.charAt(0));
-            byte[] b = Base64.decode(encodedImage.getBytes(), Base64.NO_WRAP);
-            styleBitmap = BitmapFactory.decodeByteArray(b, 0, b.length);
-            styleImageView.setImageBitmap(styleBitmap);
+            String root = Environment.getExternalStorageDirectory().toString();
+            String fileName = "NST_" + System.currentTimeMillis() + ".png";
+            File dir = new File(root, fileName);
+            dir.mkdir();
+            FileOutputStream out = new FileOutputStream(dir);
+            bitmap.compress(Bitmap.CompressFormat.PNG, 100, out);
+            out.flush();
+            out.close();
         } catch (Exception e) {
             e.printStackTrace();
         }
@@ -329,6 +353,30 @@ public class MainActivity extends AppCompatActivity {
         }
     }
 
+    class ConnectionInitializer implements Runnable {
+
+        @Override
+        public void run() {
+            while (serverConnect.getSocket() == null) {
+                try {
+                    Thread.sleep(50);
+                } catch (Exception e) {
+                    e.printStackTrace();
+                }
+            }
+            System.out.println("Server connected");
+            socket = serverConnect.getSocket();
+            try {
+                dos = new DataOutputStream(socket.getOutputStream());
+                output = new PrintWriter(socket.getOutputStream());
+                input = new BufferedReader(new InputStreamReader(socket.getInputStream()));
+                new Thread(new MessageReceiver()).start();
+            } catch (Exception e) {
+                e.printStackTrace();
+            }
+        }
+    }
+
     class ClientThread implements Runnable {
 
         @Override
@@ -377,6 +425,7 @@ public class MainActivity extends AppCompatActivity {
                     System.out.println("Message Received....");
                     System.out.println(completeMessage.length());
                     System.out.println(completeMessage);
+                    processMessage(completeMessage);
                 } catch (Exception e) {
                     e.printStackTrace();
                     break;
